@@ -24,9 +24,3 @@ type CustomConfig struct {
 	Foo    string
 	BarBaz string `split_words:"true"`
 }
-
-type RetryError struct {
-}
-
-type DeadletterError struct {
-}
