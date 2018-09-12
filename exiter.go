@@ -11,13 +11,15 @@ import (
 // Exiter is an interface for cancelling a context.Context when a program should exit
 type Exiter interface {
 	GetContext() context.Context
+	Trigger()
 }
 
 type DefaultExiter struct {
 	logger *zap.SugaredLogger
+	cancel context.CancelFunc
 }
 
-func (e DefaultExiter) GetContext() context.Context {
+func (e *DefaultExiter) GetContext() context.Context {
 	ctx := context.Background()
 
 	// trap Ctrl+C and call cancel on the context
@@ -37,5 +39,11 @@ func (e DefaultExiter) GetContext() context.Context {
 		}
 	}()
 
+	e.cancel = cancel
+
 	return ctx
+}
+
+func (e DefaultExiter) Trigger() {
+	e.cancel()
 }

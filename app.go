@@ -22,6 +22,8 @@ func NewDefaultApp(name string) *DefaultApp {
 	}
 	sugar := logger.Sugar()
 
+	exiter := &DefaultExiter{logger: sugar}
+
 	configLoader := &DefaultConfigLoader{logger: sugar, prefix: name}
 
 	router := NewDefaultRouter()
@@ -43,12 +45,10 @@ func NewDefaultApp(name string) *DefaultApp {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
 	newWorker := func() Worker {
-		return NewDefaultWorker(workerConfig, queue, queue, queue, router, sugar)
+		return NewDefaultWorker(workerConfig, exiter, queue, queue, queue, router, sugar)
 	}
 
 	scheduler := NewDefaultScheduler(sugar)
-
-	exiter := &DefaultExiter{logger: sugar}
 
 	app := &DefaultApp{
 		name:      name,

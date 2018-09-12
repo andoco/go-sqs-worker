@@ -14,7 +14,7 @@ func main() {
 	workerApp.Config.LoadConfig("custom", customConfig)
 
 	workerApp.Handle("uswitch.foo", func(ctx context.Context, msg *sqs.Message) error {
-		return nil
+		return sqslib.DBFailureError{}
 	})
 
 	workerApp.Run()

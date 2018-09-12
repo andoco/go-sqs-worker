@@ -2,7 +2,9 @@ package sqslib
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"reflect"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/buger/jsonparser"
@@ -80,4 +82,55 @@ func (h *CompleterPostMsgHook) Handle(ctx context.Context, msg *sqs.Message, msg
 	}
 
 	return ctx, nil
+}
+
+type ShouldExitFunc func(err error) bool
+
+func ShouldExitForType(errType reflect.Type) ShouldExitFunc {
+	return func(err error) bool {
+		return reflect.TypeOf(err) == errType
+	}
+}
+
+type ExitPostMsgHook struct {
+	logger    *zap.SugaredLogger
+	exiter    Exiter
+	exitFuncs []ShouldExitFunc
+}
+
+func (h *ExitPostMsgHook) AddExitType(t reflect.Type) {
+	h.AddExitFunc(ShouldExitForType(t))
+}
+
+func (h *ExitPostMsgHook) AddExitFunc(f ShouldExitFunc) {
+	h.exitFuncs = append(h.exitFuncs, f)
+}
+
+func (h ExitPostMsgHook) Handle(ctx context.Context, msg *sqs.Message, msgErr error) (context.Context, error) {
+	causeErr := errors.Cause(msgErr)
+
+	for _, f := range h.exitFuncs {
+		h.logger.Debugw("CHECKING ERROR", "err", causeErr)
+		if f(msgErr) {
+			h.logger.Debugw("EXITING DUE TO ERROR", "error", causeErr)
+			h.exiter.Trigger()
+			return ctx, nil
+		}
+	}
+	return ctx, nil
+}
+
+type DBFailureError struct {
+}
+
+func (err DBFailureError) Error() string {
+	return "access to the DB has failed"
+}
+
+type QueueFailureError struct {
+	Err error
+}
+
+func (e QueueFailureError) Error() string {
+	return fmt.Sprintf("access to the queue has failed: %v", e.Err)
 }

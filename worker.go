@@ -2,6 +2,7 @@ package sqslib
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -20,7 +21,7 @@ type WorkerConfig struct {
 	DeadletterQueue string `json:"deadletter-queue" split_words:"true"`
 }
 
-func NewDefaultWorker(config *WorkerConfig, sender Sender, receiver Receiver, deleter Deleter, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
+func NewDefaultWorker(config *WorkerConfig, exiter Exiter, sender Sender, receiver Receiver, deleter Deleter, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
 	logger.Infow("Creating worker", "config", config)
 
 	worker := &DefaultWorker{
@@ -37,6 +38,11 @@ func NewDefaultWorker(config *WorkerConfig, sender Sender, receiver Receiver, de
 
 	worker.Post(&CompleterPostMsgHook{logger: logger, sender: sender, deleter: deleter})
 	worker.Post(&LogPostMsgHook{})
+
+	exitHook := &ExitPostMsgHook{logger: logger, exiter: exiter}
+	exitHook.AddExitType(reflect.TypeOf(QueueFailureError{}))
+	exitHook.AddExitType(reflect.TypeOf(DBFailureError{}))
+	worker.Post(exitHook)
 
 	return worker
 }
@@ -77,10 +83,10 @@ func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 		}
 
 		w.logger.Debugw("DISPATCHING", "messageId", msg.MessageId)
-		err = w.dispatcher.Dispatch(ctx, msg)
+		msgErr := w.dispatcher.Dispatch(ctx, msg)
 
 		for _, hook := range w.postHooks {
-			if ctx, err = hook.Handle(ctx, msg, err); err != nil {
+			if ctx, err = hook.Handle(ctx, msg, msgErr); err != nil {
 				return errors.Wrap(err, "during post hook")
 			}
 		}
