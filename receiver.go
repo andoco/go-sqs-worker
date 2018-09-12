@@ -16,6 +16,11 @@ type Receiver interface {
 	Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error)
 }
 
+// Deleter is an interface for deleting a message from a queue.
+type Deleter interface {
+	Delete(ctx context.Context, msg *sqs.Message, queue string) error
+}
+
 func NewDefaultReceiver(config *DefaultReceiverConfig, logger *zap.SugaredLogger, svc *sqs.SQS) *DefaultReceiver {
 	return &DefaultReceiver{config: config, logger: logger, svc: svc}
 }
@@ -36,7 +41,7 @@ type DefaultReceiverConfig struct {
 	WaitTime int64
 }
 
-func (r *DefaultReceiver) Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error) {
+func (r DefaultReceiver) Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error) {
 	input := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queue),
 		MaxNumberOfMessages: aws.Int64(max),
@@ -45,11 +50,9 @@ func (r *DefaultReceiver) Receive(ctx context.Context, queue string, max int64) 
 	r.logger.Debugw("RECEIVING", "maxMessages", max)
 	output, err := r.svc.ReceiveMessageWithContext(ctx, input)
 	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok {
-			if awsErr.Code() == request.CanceledErrorCode {
-				r.logger.Debugw("RECEIVE CANCELLED")
-				return []*sqs.Message{}, nil
-			}
+		if isAwsCancelledError(err) {
+			r.logger.Debugw("RECEIVE CANCELLED")
+			return []*sqs.Message{}, nil
 		}
 		return nil, errors.Wrap(err, "receiving sqs messages")
 	}
@@ -57,4 +60,33 @@ func (r *DefaultReceiver) Receive(ctx context.Context, queue string, max int64) 
 	r.logger.Debugw("RECEIVED", "numMessages", len(output.Messages))
 
 	return output.Messages, nil
+}
+
+func (r DefaultReceiver) Delete(ctx context.Context, msg *sqs.Message, queue string) error {
+	msgLogger := r.logger.With("messageId", msg.MessageId)
+
+	input := &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(queue),
+		ReceiptHandle: msg.ReceiptHandle,
+	}
+	msgLogger.Debugw("DELETING")
+	_, err := r.svc.DeleteMessageWithContext(ctx, input)
+	if err != nil {
+		if isAwsCancelledError(err) {
+			msgLogger.Debugw("DELETE CANCELLED")
+			return nil
+		}
+		return errors.Wrap(err, "deleting sqs message")
+	}
+
+	msgLogger.Debugw("DELETED")
+
+	return nil
+}
+
+func isAwsCancelledError(err error) bool {
+	if awsErr, ok := err.(awserr.Error); ok {
+		return awsErr.Code() == request.CanceledErrorCode
+	}
+	return false
 }

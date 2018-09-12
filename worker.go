@@ -22,7 +22,7 @@ type WorkerConfig struct {
 	ReceiveQueue string `json:"receive-queue" split_words:"true"`
 }
 
-func NewDefaultWorker(config *WorkerConfig, receiver Receiver, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
+func NewDefaultWorker(config *WorkerConfig, receiver Receiver, deleter Deleter, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
 	logger.Infow("Creating worker", "config", config)
 
 	worker := &DefaultWorker{
@@ -30,11 +30,13 @@ func NewDefaultWorker(config *WorkerConfig, receiver Receiver, dispatcher Dispat
 		config:     config,
 		dispatcher: dispatcher,
 		receiver:   receiver,
+		deleter:    deleter,
 	}
 
 	worker.Pre(&LogPreMsgHook{})
 	worker.Pre(&MsgTypeHook{})
 
+	worker.Post(&CompleterPostMsgHook{deleter: deleter})
 	worker.Post(&LogPostMsgHook{})
 
 	return worker
@@ -47,6 +49,7 @@ type DefaultWorker struct {
 	preHooks   []MsgHook
 	postHooks  []PostMsgHook
 	receiver   Receiver
+	deleter    Deleter
 }
 
 func (w *DefaultWorker) Pre(hook MsgHook) {
@@ -63,6 +66,8 @@ func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 		return errors.Wrap(err, "receiving messages")
 	}
 
+	ctx = context.WithValue(ctx, "receiveQueue", w.config.ReceiveQueue)
+
 	for _, msg := range messages {
 		for _, hook := range w.preHooks {
 			if ctx, err = hook.Handle(ctx, msg); err != nil {
@@ -70,6 +75,7 @@ func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 			}
 		}
 
+		w.logger.Debugw("DISPATCHING", "messageId", msg.MessageId)
 		err = w.dispatcher.Dispatch(ctx, msg)
 
 		for _, hook := range w.postHooks {
@@ -118,5 +124,23 @@ func (h *MsgTypeHook) Handle(ctx context.Context, msg *sqs.Message) (context.Con
 		return ctx, errors.Wrap(err, "extracting msgType from header as routingKey")
 	}
 	ctx = context.WithValue(ctx, RoutingKey, field)
+	return ctx, nil
+}
+
+// CompleterPostMsgHook is a hook that completes a successfully handled message by deleting from the queue.
+type CompleterPostMsgHook struct {
+	deleter Deleter
+}
+
+func (h *CompleterPostMsgHook) Handle(ctx context.Context, msg *sqs.Message, msgErr error) (context.Context, error) {
+	queueUrl, ok := ctx.Value("receiveQueue").(string)
+	if !ok {
+		return ctx, errors.New("no receiveQueue found in context")
+	}
+
+	if err := h.deleter.Delete(ctx, msg, queueUrl); err != nil {
+		return ctx, errors.Wrap(err, "could not delete message from queue")
+	}
+
 	return ctx, nil
 }
