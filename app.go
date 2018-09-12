@@ -43,7 +43,7 @@ func NewDefaultApp(name string) *DefaultApp {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
 	newWorker := func() Worker {
-		return NewDefaultWorker(workerConfig, queue, queue, router, sugar)
+		return NewDefaultWorker(workerConfig, queue, queue, queue, router, sugar)
 	}
 
 	scheduler := NewDefaultScheduler(sugar)

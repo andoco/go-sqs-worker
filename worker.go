@@ -19,16 +19,18 @@ type Worker interface {
 }
 
 type WorkerConfig struct {
-	ReceiveQueue string `json:"receive-queue" split_words:"true"`
+	ReceiveQueue    string `json:"receive-queue" split_words:"true"`
+	DeadletterQueue string `json:"deadletter-queue" split_words:"true"`
 }
 
-func NewDefaultWorker(config *WorkerConfig, receiver Receiver, deleter Deleter, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
+func NewDefaultWorker(config *WorkerConfig, sender Sender, receiver Receiver, deleter Deleter, dispatcher Dispatcher, logger *zap.SugaredLogger) *DefaultWorker {
 	logger.Infow("Creating worker", "config", config)
 
 	worker := &DefaultWorker{
 		logger:     logger,
 		config:     config,
 		dispatcher: dispatcher,
+		sender:     sender,
 		receiver:   receiver,
 		deleter:    deleter,
 	}
@@ -36,7 +38,7 @@ func NewDefaultWorker(config *WorkerConfig, receiver Receiver, deleter Deleter, 
 	worker.Pre(&LogPreMsgHook{})
 	worker.Pre(&MsgTypeHook{})
 
-	worker.Post(&CompleterPostMsgHook{deleter: deleter})
+	worker.Post(&CompleterPostMsgHook{logger: logger, sender: sender, deleter: deleter})
 	worker.Post(&LogPostMsgHook{})
 
 	return worker
@@ -48,6 +50,7 @@ type DefaultWorker struct {
 	dispatcher Dispatcher
 	preHooks   []MsgHook
 	postHooks  []PostMsgHook
+	sender     Sender
 	receiver   Receiver
 	deleter    Deleter
 }
@@ -67,6 +70,7 @@ func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 	}
 
 	ctx = context.WithValue(ctx, "receiveQueue", w.config.ReceiveQueue)
+	ctx = context.WithValue(ctx, "deadletterQueue", w.config.DeadletterQueue)
 
 	for _, msg := range messages {
 		for _, hook := range w.preHooks {
@@ -129,13 +133,30 @@ func (h *MsgTypeHook) Handle(ctx context.Context, msg *sqs.Message) (context.Con
 
 // CompleterPostMsgHook is a hook that completes a successfully handled message by deleting from the queue.
 type CompleterPostMsgHook struct {
+	logger  *zap.SugaredLogger
+	sender  Sender
 	deleter Deleter
 }
 
 func (h *CompleterPostMsgHook) Handle(ctx context.Context, msg *sqs.Message, msgErr error) (context.Context, error) {
+	msgLogger := h.logger.With("messageId", msg.MessageId)
+	msgLogger.Debugw("COMPLETING")
+
 	queueUrl, ok := ctx.Value("receiveQueue").(string)
 	if !ok {
 		return ctx, errors.New("no receiveQueue found in context")
+	}
+
+	if msgErr != nil {
+		msgLogger.Debugw("DEADLETTERING", "reason", msgErr)
+		deadletterQueue, ok := ctx.Value("deadletterQueue").(string)
+		if !ok {
+			return ctx, errors.New("no deadletterQueue found in context")
+		}
+
+		if err := h.sender.Send(ctx, *msg.Body, deadletterQueue); err != nil {
+			return ctx, errors.Wrap(err, "sending message to deadletter queue")
+		}
 	}
 
 	if err := h.deleter.Delete(ctx, msg, queueUrl); err != nil {
