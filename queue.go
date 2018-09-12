@@ -21,6 +21,10 @@ type Deleter interface {
 	Delete(ctx context.Context, msg *sqs.Message, queue string) error
 }
 
+type Sender interface {
+	Send(ctx context.Context, body string, queue string) error
+}
+
 func NewDefaultQueue(config *DefaultQueueConfig, logger *zap.SugaredLogger, svc *sqs.SQS) *DefaultQueue {
 	return &DefaultQueue{config: config, logger: logger, svc: svc}
 }
@@ -80,6 +84,26 @@ func (r DefaultQueue) Delete(ctx context.Context, msg *sqs.Message, queue string
 	}
 
 	msgLogger.Debugw("DELETED")
+
+	return nil
+}
+
+func (r DefaultQueue) Send(ctx context.Context, body string, queue string) error {
+	input := &sqs.SendMessageInput{
+		QueueUrl:    aws.String(queue),
+		MessageBody: aws.String(body),
+	}
+	r.logger.Debugw("SENDING")
+	_, err := r.svc.SendMessageWithContext(ctx, input)
+	if err != nil {
+		if isAwsCancelledError(err) {
+			r.logger.Debugw("SEND CANCELLED")
+			return nil
+		}
+		return errors.Wrap(err, "sending sqs message")
+	}
+
+	r.logger.Debugw("SENT")
 
 	return nil
 }
