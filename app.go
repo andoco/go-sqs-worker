@@ -32,18 +32,18 @@ func NewDefaultApp(name string) *DefaultApp {
 	}
 	svc := sqs.New(sess)
 
-	receiverConfig := NewDefaultReceiverConfig()
-	if err := configLoader.LoadConfig("receiver", receiverConfig); err != nil {
-		sugar.Fatalw("Failed loading receiver config", "error", err)
+	queueConfig := NewDefaultQueueConfig()
+	if err := configLoader.LoadConfig("queue", queueConfig); err != nil {
+		sugar.Fatalw("Failed loading queue config", "error", err)
 	}
-	receiver := NewDefaultReceiver(receiverConfig, sugar, svc)
+	queue := NewDefaultQueue(queueConfig, sugar, svc)
 
 	workerConfig := &WorkerConfig{}
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
 	newWorker := func() Worker {
-		return NewDefaultWorker(workerConfig, receiver, receiver, router, sugar)
+		return NewDefaultWorker(workerConfig, queue, queue, router, sugar)
 	}
 
 	scheduler := NewDefaultScheduler(sugar)

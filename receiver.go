@@ -21,27 +21,27 @@ type Deleter interface {
 	Delete(ctx context.Context, msg *sqs.Message, queue string) error
 }
 
-func NewDefaultReceiver(config *DefaultReceiverConfig, logger *zap.SugaredLogger, svc *sqs.SQS) *DefaultReceiver {
-	return &DefaultReceiver{config: config, logger: logger, svc: svc}
+func NewDefaultQueue(config *DefaultQueueConfig, logger *zap.SugaredLogger, svc *sqs.SQS) *DefaultQueue {
+	return &DefaultQueue{config: config, logger: logger, svc: svc}
 }
 
-type DefaultReceiver struct {
-	config *DefaultReceiverConfig
+type DefaultQueue struct {
+	config *DefaultQueueConfig
 	svc    *sqs.SQS
 	logger *zap.SugaredLogger
 }
 
-func NewDefaultReceiverConfig() *DefaultReceiverConfig {
-	return &DefaultReceiverConfig{
+func NewDefaultQueueConfig() *DefaultQueueConfig {
+	return &DefaultQueueConfig{
 		WaitTime: 20,
 	}
 }
 
-type DefaultReceiverConfig struct {
+type DefaultQueueConfig struct {
 	WaitTime int64
 }
 
-func (r DefaultReceiver) Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error) {
+func (r DefaultQueue) Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error) {
 	input := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queue),
 		MaxNumberOfMessages: aws.Int64(max),
@@ -62,7 +62,7 @@ func (r DefaultReceiver) Receive(ctx context.Context, queue string, max int64) (
 	return output.Messages, nil
 }
 
-func (r DefaultReceiver) Delete(ctx context.Context, msg *sqs.Message, queue string) error {
+func (r DefaultQueue) Delete(ctx context.Context, msg *sqs.Message, queue string) error {
 	msgLogger := r.logger.With("messageId", msg.MessageId)
 
 	input := &sqs.DeleteMessageInput{
