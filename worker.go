@@ -90,6 +90,10 @@ func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 				return errors.Wrap(err, "during post hook")
 			}
 		}
+
+		if msgErr != nil {
+			return msgErr
+		}
 	}
 
 	return nil

@@ -48,7 +48,7 @@ func NewDefaultApp(name string) *DefaultApp {
 		return NewDefaultWorker(workerConfig, exiter, queue, queue, queue, router, sugar)
 	}
 
-	scheduler := NewDefaultScheduler(sugar)
+	scheduler := NewDefaultScheduler(sugar, exiter)
 
 	app := &DefaultApp{
 		name:      name,
@@ -83,7 +83,7 @@ func (a *DefaultApp) Run() {
 	ctx := a.exiter.GetContext()
 
 	if err := a.Scheduler.Run(ctx, a.Worker); err != nil {
-		a.logger.Fatalw("Failed to run scheduler", "error", err)
+		a.logger.Fatalw("Scheduler failed", "error", err)
 	}
 
 	a.logger.Debug("FINISHED APP")
