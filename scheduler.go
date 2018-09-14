@@ -24,7 +24,8 @@ type DefaultScheduler struct {
 
 type NewWorkerFunc func() Worker
 
-const ErrorRateThreshold = 2
+const ThrottleThreshold = 2
+const ShutdownThreshold = 3
 
 func (s DefaultScheduler) Run(ctx context.Context, workerFunc NewWorkerFunc) error {
 	s.logger.Debug("SCHEDULING")
@@ -42,9 +43,13 @@ func (s DefaultScheduler) Run(ctx context.Context, workerFunc NewWorkerFunc) err
 			if err := worker.ReceiveAndDispatch(ctx); err != nil {
 				s.logger.Errorw("Error returned from worker", "error", err)
 				counter.Incr(1)
-				if counter.Rate() >= ErrorRateThreshold {
-					s.logger.Errorw("Triggering shutdown due to exceeded error rate", "errorRate", counter.Rate(), "errorRateThreshold", ErrorRateThreshold)
+				switch {
+				case counter.Rate() >= ShutdownThreshold:
+					s.logger.Errorw("Triggering shutdown due to exceeded error rate", "errorRate", counter.Rate(), "errorRateThreshold", ShutdownThreshold)
 					s.exiter.Trigger()
+				case counter.Rate() >= ThrottleThreshold:
+					s.logger.Errorw("Throttling due to exceeded error rate", "errorRate", counter.Rate(), "errorRateThreshold", ThrottleThreshold)
+					time.Sleep(10 * time.Second)
 				}
 			}
 		}
