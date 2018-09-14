@@ -2,7 +2,6 @@ package sqslib
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 
@@ -118,19 +117,4 @@ func (h ExitPostMsgHook) Handle(ctx context.Context, msg *sqs.Message, msgErr er
 		}
 	}
 	return ctx, nil
-}
-
-type DBFailureError struct {
-}
-
-func (err DBFailureError) Error() string {
-	return "access to the DB has failed"
-}
-
-type QueueFailureError struct {
-	Err error
-}
-
-func (e QueueFailureError) Error() string {
-	return fmt.Sprintf("access to the queue has failed: %v", e.Err)
 }
