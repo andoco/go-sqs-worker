@@ -2,9 +2,9 @@ package sqslib
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
+	"github.com/paulbellamy/ratecounter"
 	"go.uber.org/zap"
 )
 
@@ -74,11 +74,13 @@ type ErrorMonitor interface {
 }
 
 func NewDefaultErrorMonitor() *DefaultErrorMonitor {
-	return &DefaultErrorMonitor{}
+	return &DefaultErrorMonitor{
+		counter: ratecounter.NewRateCounter(1 * time.Second),
+	}
 }
 
 type DefaultErrorMonitor struct {
-	count uint64
+	counter *ratecounter.RateCounter
 }
 
 func (d *DefaultErrorMonitor) Monitor(ctx context.Context) chan MonitorResultType {
@@ -88,10 +90,10 @@ func (d *DefaultErrorMonitor) Monitor(ctx context.Context) chan MonitorResultTyp
 		case <-ctx.Done():
 			return
 		case <-time.After(1 * time.Second):
-			errCount := atomic.LoadUint64(&d.count)
-			if errCount >= ErrorShutdownThreshold {
+			errRate := d.counter.Rate()
+			if errRate >= ErrorShutdownThreshold {
 				ch <- MonitorResultTypeShutdown
-			} else if errCount >= ErrorThrottleThreshold {
+			} else if errRate >= ErrorThrottleThreshold {
 				ch <- MonitorResultTypeThrottle
 			}
 		}
@@ -100,5 +102,5 @@ func (d *DefaultErrorMonitor) Monitor(ctx context.Context) chan MonitorResultTyp
 }
 
 func (d *DefaultErrorMonitor) Inc() {
-	atomic.AddUint64(&d.count, 1)
+	d.counter.Incr(1)
 }
