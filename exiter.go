@@ -45,5 +45,6 @@ func (e *DefaultExiter) GetContext() context.Context {
 }
 
 func (e DefaultExiter) Trigger() {
+	e.logger.Debug("TRIGGER SHUTDOWN")
 	e.cancel()
 }

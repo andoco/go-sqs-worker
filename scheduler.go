@@ -2,6 +2,7 @@ package sqslib
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/paulbellamy/ratecounter"
@@ -13,48 +14,74 @@ type Scheduler interface {
 	Run(ctx context.Context, workerFunc NewWorkerFunc) error
 }
 
-func NewDefaultScheduler(logger *zap.SugaredLogger, exiter Exiter, errMonitor ErrorMonitor) *DefaultScheduler {
-	return &DefaultScheduler{logger: logger, exiter: exiter, errMonitor: errMonitor}
+func NewDefaultScheduler(config *DefaultSchedulerConfig, logger *zap.SugaredLogger, exiter Exiter, errMonitor ErrorMonitor) *DefaultScheduler {
+	return &DefaultScheduler{config: config, logger: logger, exiter: exiter, errMonitor: errMonitor}
 }
 
 type DefaultScheduler struct {
+	config     *DefaultSchedulerConfig
 	logger     *zap.SugaredLogger
 	exiter     Exiter
 	errMonitor ErrorMonitor
 }
 
-type NewWorkerFunc func() Worker
+func NewDefaultSchedulerConfig() *DefaultSchedulerConfig {
+	return &DefaultSchedulerConfig{
+		NumWorkers: 1,
+	}
+}
+
+type DefaultSchedulerConfig struct {
+	NumWorkers int
+}
+
+type NewWorkerFunc func(logger *zap.SugaredLogger) Worker
 
 func (s DefaultScheduler) Run(ctx context.Context, workerFunc NewWorkerFunc) error {
-	s.logger.Debug("SCHEDULING")
-	worker := workerFunc()
-	s.logger.Debug("Created worker")
+	s.logger.Debugw("SCHEDULING", "numWorkers", s.config.NumWorkers)
 
 	monitorChan := s.errMonitor.Monitor(ctx)
 
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Debugw("Context was cancelled. Will exit scheduler.")
-			return nil
+	wg := sync.WaitGroup{}
 
-		case monitorResult := <-monitorChan:
-			switch monitorResult {
-			case MonitorResultTypeThrottle:
-				s.logger.Errorw("Throttling due to exceeded error rate", "errorRateThreshold", ErrorThrottleThreshold)
-				time.Sleep(10 * time.Second)
-			case MonitorResultTypeShutdown:
-				s.logger.Errorw("Triggering shutdown due to exceeded error rate", "errorRateThreshold", ErrorShutdownThreshold)
-				s.exiter.Trigger()
-			}
+	for i := 0; i < s.config.NumWorkers; i++ {
+		workerLogger := s.logger.With("workerId", i)
+		wg.Add(1)
 
-		default:
-			if err := worker.ReceiveAndDispatch(ctx); err != nil {
-				s.logger.Errorw("Error returned from worker", "error", err)
-				s.errMonitor.Inc()
+		go func(workerId int, logger *zap.SugaredLogger) {
+			worker := workerFunc(logger)
+			s.logger.Debugw("WORKER ROUTINE RUNNING", "workerId", workerId)
+
+			for {
+				select {
+				case <-ctx.Done():
+					workerLogger.Debugw("CONTEXT DONE")
+					wg.Done()
+					return
+
+				case monitorResult := <-monitorChan:
+					switch monitorResult {
+					case MonitorResultTypeThrottle:
+						workerLogger.Errorw("Throttling due to exceeded error rate", "errorRateThreshold", ErrorThrottleThreshold)
+						time.Sleep(10 * time.Second)
+					case MonitorResultTypeShutdown:
+						workerLogger.Errorw("Triggering shutdown due to exceeded error rate", "errorRateThreshold", ErrorShutdownThreshold)
+						s.exiter.Trigger()
+					}
+
+				default:
+					if err := worker.ReceiveAndDispatch(ctx); err != nil {
+						workerLogger.Errorw("Error returned from worker", "error", err)
+						s.errMonitor.Inc()
+					}
+				}
 			}
-		}
+		}(i, workerLogger)
 	}
+
+	wg.Wait()
+
+	return nil
 }
 
 type MonitorResultType int

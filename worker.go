@@ -67,10 +67,12 @@ func (w *DefaultWorker) Post(hook PostMsgHook) {
 }
 
 func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
+	w.logger.Debugw("RECEIVE")
 	messages, err := w.receiver.Receive(ctx, w.config.ReceiveQueue, 1)
 	if err != nil {
 		return errors.Wrap(err, "receiving messages")
 	}
+	w.logger.Debugw("RECEIVED", "numMessages", len(messages))
 
 	ctx = context.WithValue(ctx, "receiveQueue", w.config.ReceiveQueue)
 	ctx = context.WithValue(ctx, "deadletterQueue", w.config.DeadletterQueue)

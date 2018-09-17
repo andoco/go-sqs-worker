@@ -44,13 +44,17 @@ func NewDefaultApp(name string) *DefaultApp {
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
-	newWorker := func() Worker {
-		return NewDefaultWorker(workerConfig, exiter, queue, queue, queue, router, sugar)
+	newWorker := func(logger *zap.SugaredLogger) Worker {
+		return NewDefaultWorker(workerConfig, exiter, queue, queue, queue, router, logger)
 	}
 
 	errMonitor := NewDefaultErrorMonitor()
 
-	scheduler := NewDefaultScheduler(sugar, exiter, errMonitor)
+	schedulerConfig := NewDefaultSchedulerConfig()
+	if err := configLoader.LoadConfig("scheduler", schedulerConfig); err != nil {
+		sugar.Fatalw("Failed to load scheduler config", "error", err)
+	}
+	scheduler := NewDefaultScheduler(schedulerConfig, sugar, exiter, errMonitor)
 
 	app := &DefaultApp{
 		name:      name,
