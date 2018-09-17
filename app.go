@@ -48,7 +48,9 @@ func NewDefaultApp(name string) *DefaultApp {
 		return NewDefaultWorker(workerConfig, exiter, queue, queue, queue, router, sugar)
 	}
 
-	scheduler := NewDefaultScheduler(sugar, exiter)
+	errMonitor := NewDefaultErrorMonitor()
+
+	scheduler := NewDefaultScheduler(sugar, exiter, errMonitor)
 
 	app := &DefaultApp{
 		name:      name,
