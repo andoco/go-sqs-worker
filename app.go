@@ -59,7 +59,7 @@ func NewDefaultApp(name string) *DefaultApp {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
 	newWorker := func(logger *zap.SugaredLogger) Worker {
-		return NewDefaultWorker(workerConfig, exiter, pipeline, queue, queue, logger, errMonitor)
+		return NewDefaultWorker(workerConfig, exiter, pipeline, queue, logger, errMonitor)
 	}
 
 	schedulerConfig := NewDefaultSchedulerConfig()
