@@ -52,7 +52,7 @@ func NewDefaultApp(name string) *DefaultApp {
 
 	pipeline := NewDefaultPipeline(sugar, preHooks, postHooks, router)
 
-	errMonitor := NewDefaultErrorMonitor()
+	errMonitor := NewDefaultErrorMonitor(5, 10)
 
 	workerConfig := &WorkerConfig{}
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {

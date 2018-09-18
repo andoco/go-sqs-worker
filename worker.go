@@ -45,7 +45,6 @@ func (w DefaultWorker) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Debugw("CONTEXT DONE")
 			return nil
 
 		default:

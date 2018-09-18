@@ -63,7 +63,7 @@ func (s DefaultScheduler) Run(ctx context.Context, workerFunc NewWorkerFunc) err
 			case monitorResult := <-monitorChan:
 				switch monitorResult {
 				case MonitorResultTypeThrottle:
-					s.logger.Errorw("Throttling due to exceeded error rate", "errorRateThreshold", ErrorThrottleThreshold)
+					s.logger.Errorw("Throttling due to exceeded error rate")
 					// add 1 to WaitGroup while throttling to prevent scheduler exiting
 					wg.Add(1)
 					for i := 0; i < len(s.workerCancels); i++ {
@@ -75,7 +75,7 @@ func (s DefaultScheduler) Run(ctx context.Context, workerFunc NewWorkerFunc) err
 					}
 					wg.Done()
 				case MonitorResultTypeShutdown:
-					s.logger.Errorw("Exiting worker due to exceeded error rate", "errorRateThreshold", ErrorShutdownThreshold)
+					s.logger.Errorw("Exiting worker due to exceeded error rate")
 					n := len(s.workerCancels)
 					for i := 0; i < n; i++ {
 						s.scaleChan <- scaleTypeDown
@@ -150,25 +150,26 @@ const (
 	MonitorResultTypeShutdown
 )
 
-const ErrorThrottleThreshold = 2
-const ErrorShutdownThreshold = 3
-
 type ErrorMonitor interface {
 	Monitor(ctx context.Context) chan MonitorResultType
 	Channel() chan MonitorResultType
 	Inc()
 }
 
-func NewDefaultErrorMonitor() *DefaultErrorMonitor {
+func NewDefaultErrorMonitor(throttle int64, shutdown int64) *DefaultErrorMonitor {
 	return &DefaultErrorMonitor{
-		ch:      make(chan MonitorResultType),
-		counter: ratecounter.NewRateCounter(1 * time.Second),
+		throttleThreshold: throttle,
+		shutdownThreshold: shutdown,
+		ch:                make(chan MonitorResultType),
+		counter:           ratecounter.NewRateCounter(1 * time.Second),
 	}
 }
 
 type DefaultErrorMonitor struct {
-	ch      chan MonitorResultType
-	counter *ratecounter.RateCounter
+	throttleThreshold int64
+	shutdownThreshold int64
+	ch                chan MonitorResultType
+	counter           *ratecounter.RateCounter
 }
 
 func (d *DefaultErrorMonitor) Monitor(ctx context.Context) chan MonitorResultType {
@@ -178,9 +179,9 @@ func (d *DefaultErrorMonitor) Monitor(ctx context.Context) chan MonitorResultTyp
 			return
 		case <-time.After(1 * time.Second):
 			errRate := d.counter.Rate()
-			if errRate >= ErrorShutdownThreshold {
+			if errRate >= d.shutdownThreshold {
 				d.ch <- MonitorResultTypeShutdown
-			} else if errRate >= ErrorThrottleThreshold {
+			} else if errRate >= d.throttleThreshold {
 				d.ch <- MonitorResultTypeThrottle
 			}
 		}
