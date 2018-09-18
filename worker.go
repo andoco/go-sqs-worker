@@ -2,7 +2,6 @@ package sqslib
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -47,23 +46,11 @@ type DefaultWorker struct {
 }
 
 func (w DefaultWorker) Run(ctx context.Context) error {
-	monitorChan := w.errMonitor.Channel()
-
 	for {
 		select {
 		case <-ctx.Done():
 			w.logger.Debugw("CONTEXT DONE")
 			return nil
-
-		case monitorResult := <-monitorChan:
-			switch monitorResult {
-			case MonitorResultTypeThrottle:
-				w.logger.Errorw("Throttling due to exceeded error rate", "errorRateThreshold", ErrorThrottleThreshold)
-				time.Sleep(10 * time.Second)
-			case MonitorResultTypeShutdown:
-				w.logger.Errorw("Exiting worker due to exceeded error rate", "errorRateThreshold", ErrorShutdownThreshold)
-				return nil
-			}
 
 		default:
 			if err := w.ReceiveAndDispatch(ctx); err != nil {
