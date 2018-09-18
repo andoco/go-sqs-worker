@@ -52,15 +52,15 @@ func NewDefaultApp(name string) *DefaultApp {
 
 	pipeline := NewDefaultPipeline(sugar, preHooks, postHooks, router)
 
+	errMonitor := NewDefaultErrorMonitor()
+
 	workerConfig := &WorkerConfig{}
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}
 	newWorker := func(logger *zap.SugaredLogger) Worker {
-		return NewDefaultWorker(workerConfig, exiter, pipeline, queue, queue, queue, logger)
+		return NewDefaultWorker(workerConfig, exiter, pipeline, queue, queue, queue, logger, errMonitor)
 	}
-
-	errMonitor := NewDefaultErrorMonitor()
 
 	schedulerConfig := NewDefaultSchedulerConfig()
 	if err := configLoader.LoadConfig("scheduler", schedulerConfig); err != nil {
