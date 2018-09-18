@@ -19,14 +19,13 @@ type WorkerConfig struct {
 	DeadletterQueue string `json:"deadletter-queue" split_words:"true"`
 }
 
-func NewDefaultWorker(config *WorkerConfig, exiter Exiter, pipeline Pipeline, sender Sender, receiver Receiver, deleter Deleter, logger *zap.SugaredLogger, errMonitor ErrorMonitor) *DefaultWorker {
+func NewDefaultWorker(config *WorkerConfig, exiter Exiter, pipeline Pipeline, receiver Receiver, deleter Deleter, logger *zap.SugaredLogger, errMonitor ErrorMonitor) *DefaultWorker {
 	logger.Infow("Creating worker", "config", config)
 
 	worker := &DefaultWorker{
 		logger:     logger,
 		config:     config,
 		pipeline:   pipeline,
-		sender:     sender,
 		receiver:   receiver,
 		deleter:    deleter,
 		errMonitor: errMonitor,
@@ -39,7 +38,6 @@ type DefaultWorker struct {
 	logger     *zap.SugaredLogger
 	config     *WorkerConfig
 	pipeline   Pipeline
-	sender     Sender
 	receiver   Receiver
 	deleter    Deleter
 	errMonitor ErrorMonitor
