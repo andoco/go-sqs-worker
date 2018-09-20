@@ -50,7 +50,7 @@ func NewDefaultApp(name string) *DefaultApp {
 
 	errMonitor := NewDefaultErrorMonitor(2, 3)
 
-	workerConfig := &WorkerConfig{}
+	workerConfig := NewWorkerConfig()
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {
 		sugar.Fatalw("Failed loading worker config", "error", err)
 	}

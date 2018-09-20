@@ -13,7 +13,7 @@ import (
 
 // Receiver is an interface for receiving messages from a queue.
 type Receiver interface {
-	Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error)
+	Receive(ctx context.Context, queue string, max int) ([]*sqs.Message, error)
 }
 
 // Deleter is an interface for deleting a message from a queue.
@@ -45,10 +45,10 @@ type DefaultQueueConfig struct {
 	WaitTime int64
 }
 
-func (r DefaultQueue) Receive(ctx context.Context, queue string, max int64) ([]*sqs.Message, error) {
+func (r DefaultQueue) Receive(ctx context.Context, queue string, max int) ([]*sqs.Message, error) {
 	input := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queue),
-		MaxNumberOfMessages: aws.Int64(max),
+		MaxNumberOfMessages: aws.Int64(int64(max)),
 		WaitTimeSeconds:     aws.Int64(r.config.WaitTime),
 	}
 	r.logger.Debugw("RECEIVING", "maxMessages", max)

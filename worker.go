@@ -15,8 +15,15 @@ type Worker interface {
 }
 
 type WorkerConfig struct {
-	ReceiveQueue    string `json:"receive-queue" split_words:"true"`
-	DeadletterQueue string `json:"deadletter-queue" split_words:"true"`
+	ReceiveQueue       string `json:"receive-queue" split_words:"true"`
+	ReceiveMaxMessages int    `json:"receive-max-messages"`
+	DeadletterQueue    string `json:"deadletter-queue" split_words:"true"`
+}
+
+func NewWorkerConfig() *WorkerConfig {
+	return &WorkerConfig{
+		ReceiveMaxMessages: 1,
+	}
 }
 
 func NewDefaultWorker(config *WorkerConfig, exiter Exiter, pipeline Pipeline, receiver Receiver, logger *zap.SugaredLogger, errMonitor ErrorMonitor) *DefaultWorker {
@@ -60,7 +67,7 @@ func (w DefaultWorker) Run(ctx context.Context) error {
 
 func (w DefaultWorker) ReceiveAndDispatch(ctx context.Context) error {
 	w.logger.Debugw("RECEIVE")
-	messages, err := w.receiver.Receive(ctx, w.config.ReceiveQueue, 1)
+	messages, err := w.receiver.Receive(ctx, w.config.ReceiveQueue, w.config.ReceiveMaxMessages)
 	if err != nil {
 		return errors.Wrap(err, "receiving messages")
 	}
