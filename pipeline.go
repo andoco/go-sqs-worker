@@ -8,6 +8,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type Step interface {
+	Process(ctx context.Context, msg *sqs.Message) (context.Context, error)
+}
+
 type Pipeline interface {
 	Process(ctx context.Context, msg *sqs.Message) error
 }
@@ -15,39 +19,23 @@ type Pipeline interface {
 type DefaultPipeline struct {
 	logger     *zap.SugaredLogger
 	dispatcher Dispatcher
-	preHooks   []MsgHook
-	postHooks  []PostMsgHook
+	steps      []Step
 }
 
-func NewDefaultPipeline(logger *zap.SugaredLogger, preHooks []MsgHook, postHooks []PostMsgHook, dispatcher Dispatcher) *DefaultPipeline {
+func NewDefaultPipeline(logger *zap.SugaredLogger, steps []Step) *DefaultPipeline {
 	return &DefaultPipeline{
-		logger:     logger,
-		preHooks:   preHooks,
-		postHooks:  postHooks,
-		dispatcher: dispatcher,
+		logger: logger,
+		steps:  steps,
 	}
 }
 
 func (w DefaultPipeline) Process(ctx context.Context, msg *sqs.Message) error {
 	var err error
 
-	for _, hook := range w.preHooks {
-		if ctx, err = hook.Handle(ctx, msg); err != nil {
-			return errors.Wrap(err, "during pre hook")
+	for _, step := range w.steps {
+		if ctx, err = step.Process(ctx, msg); err != nil {
+			return errors.Wrap(err, "pipeline step error")
 		}
-	}
-
-	w.logger.Debugw("DISPATCHING", "messageId", msg.MessageId)
-	msgErr := w.dispatcher.Dispatch(ctx, msg)
-
-	for _, hook := range w.postHooks {
-		if ctx, err = hook.Handle(ctx, msg, msgErr); err != nil {
-			return errors.Wrap(err, "during post hook")
-		}
-	}
-
-	if msgErr != nil {
-		return msgErr
 	}
 
 	return nil

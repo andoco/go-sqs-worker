@@ -40,19 +40,15 @@ func NewDefaultApp(name string) *DefaultApp {
 	}
 	queue := NewDefaultQueue(queueConfig, sugar, svc)
 
-	preHooks := []MsgHook{
-		&LogPreMsgHook{},
-		&MsgTypeHook{},
+	steps := []Step{
+		&MsgTypeStep{},
+		&DispatchStep{dispatcher: router},
+		&CompleterStep{logger: sugar, sender: queue, deleter: queue},
 	}
 
-	postHooks := []PostMsgHook{
-		&CompleterPostMsgHook{logger: sugar, sender: queue, deleter: queue},
-		&LogPostMsgHook{},
-	}
+	pipeline := NewDefaultPipeline(sugar, steps)
 
-	pipeline := NewDefaultPipeline(sugar, preHooks, postHooks, router)
-
-	errMonitor := NewDefaultErrorMonitor(5, 10)
+	errMonitor := NewDefaultErrorMonitor(2, 3)
 
 	workerConfig := &WorkerConfig{}
 	if err := configLoader.LoadConfig("worker", workerConfig); err != nil {
